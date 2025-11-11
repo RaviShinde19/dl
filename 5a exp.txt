@@ -1,0 +1,445 @@
+🧠 THEORY — Concepts Behind the Code
+🌍 1. What Are Word Embeddings?
+
+
+Word embeddings are dense vector representations of words, where words with similar meanings have similar numeric representations.
+
+
+They capture semantic and syntactic relationships (e.g., “king - man + woman ≈ queen”).
+
+
+Example:
+king → [0.21, 0.89, -0.45, …]
+queen → [0.20, 0.90, -0.47, …]
+
+Exam phrase:
+
+“Word embeddings map words into continuous vector space so that similar words have nearby vector positions.”
+
+
+⚙️ 2. What Is CBOW (Continuous Bag of Words)?
+
+
+CBOW is one of the two architectures from Word2Vec (other is Skip-Gram).
+
+
+CBOW predicts the target word given surrounding context words.
+(Skip-Gram does the reverse.)
+
+
+Example:
+
+Sentence: “deep learning uses neural networks”
+Context window = 2
+Input: [“deep”, “uses”, “neural”, “networks”] → Predict: “learning”
+
+So your model tries to learn the relationship between context words and the target word.
+
+🧩 3. Components of the Model
+ComponentPurposeTokenizerConverts text to numeric IDs for each unique word.Embedding LayerConverts word IDs to dense continuous vectors.Context WindowDefines how many words before and after are used to predict target.Lambda LayerAverages context word embeddings (CBOW bag-of-words).Dense LayersNon-linear transformations that learn deeper relationships.Softmax LayerOutputs probability for each word as the predicted center word.Loss Function (sparse_categorical_crossentropy)Compares predicted vs actual word IDs.Optimizer (Adam)Updates weights to reduce prediction error.
+
+📊 4. Learning Objective (simplified math)
+Model learns embeddings E so that
+P(wt∣context)=softmax(W⋅mean(E[context]))P(w_t | context) = softmax(W \cdot mean(E[context]))P(wt​∣context)=softmax(W⋅mean(E[context]))
+where wtw_twt​ is target word, E[context]E[context]E[context] are embedding vectors of context words.
+Loss = − log probability of correct target word.
+Model minimizes this over all (context, target) pairs.
+
+🧪 5. What You’re Building Here
+✅ Data cleaning and tokenization
+✅ Context-target pair generation (CBOW style)
+✅ Neural network (Embedding → Mean → Dense → Softmax)
+✅ Train to predict target words
+✅ Check learned predictions qualitatively
+
+🔍 LINE-BY-LINE CODE EXPLANATION
+
+Text Cleaning & Preprocessing
+import numpy as np
+import re
+from tensorflow.keras.preprocessing.text import Tokenizer
+
+
+
+NumPy: handles numeric arrays.
+
+
+re: regex for cleaning text.
+
+
+Tokenizer: converts text into numerical word indices.
+
+
+
+data = """Deep learning (also known as deep structured learning) ..."""
+data = data.split('.')
+
+
+
+Multi-sentence text paragraph.
+
+
+Split by "." → gives a list of sentences.
+
+
+
+clean_sent=[]
+for sentence in data:
+    if sentence=="":
+        continue
+    sentence = re.sub('[^A-Za-z0-9]+', ' ', (sentence))
+    sentence = re.sub(r'(?:^| )\w (?:$| )', ' ', (sentence)).strip()
+    sentence = sentence.lower()
+    clean_sent.append(sentence)
+
+Line-by-line:
+
+
+if sentence=="": skip empty lines.
+
+
+re.sub('[^A-Za-z0-9]+', ' ', sentence) → removes punctuation/special chars, keeps only letters/numbers.
+
+
+re.sub(r'(?:^| )\w (?:$| )', ' ', sentence) → removes single-character words (like “a”, “I”).
+
+
+.strip() → removes leading/trailing spaces.
+
+
+.lower() → convert to lowercase for uniformity.
+
+
+Append to clean_sent.
+
+
+✅ Now clean_sent is a list of clean, lowercase sentences — suitable for tokenization.
+
+Tokenization and Vocabulary Building
+tokenizer = Tokenizer()
+tokenizer.fit_on_texts(clean_sent)
+word2idx = tokenizer.word_index
+idx2word = {v: k for k, v in word2idx.items()}
+vocab_size = len(word2idx) + 1
+
+
+
+Tokenizer() → builds mapping of word → index.
+
+
+fit_on_texts → reads all words and assigns unique numeric IDs (starting from 1).
+
+
+word2idx → dictionary of word→id.
+
+
+idx2word → reverse dictionary (id→word) for decoding.
+
+
+vocab_size → total number of unique words + 1 (because indexing starts from 1).
+
+
+✅ Vocabulary created.
+
+sequences = tokenizer.texts_to_sequences(clean_sent)
+
+
+
+Converts each sentence into a list of numeric IDs (based on the tokenizer mapping).
+Example:
+“deep learning methods” → [1, 2, 3].
+
+
+
+Creating Context-Target Pairs (CBOW)
+emb_size = 10
+context_size = 2
+
+contexts = []
+targets = []
+
+for sequence in sequences:
+    for i in range(context_size, len(sequence) - context_size):
+        target = sequence[i]
+        context = [sequence[i - 2], sequence[i - 1], sequence[i + 1], sequence[i + 2]]
+        contexts.append(context)
+        targets.append(target)
+
+Explanation:
+
+
+context_size = 2 → Use 2 words before and 2 words after as context.
+
+
+Loop through each word position i in a sentence:
+
+
+target = sequence[i] → current word (center).
+
+
+context = [sequence[i-2], i-1, i+1, i+2] → 4 context words.
+
+
+Store them.
+
+
+
+
+✅ After this, we have:
+
+
+contexts: list of context-word indices.
+
+
+targets: list of target-word indices.
+
+
+Example:
+Sentence: “deep learning uses neural networks”
+Context (deep, uses, neural, networks) → Target: “learning”
+
+for i in range(5):
+    words = []
+    target = idx2word.get(targets[i])
+    for j in contexts[i]:
+        words.append(idx2word.get(j))
+    print(words," -> ", target)
+
+
+
+Decodes the first 5 (context → target) pairs using idx2word.
+
+
+Helps visually verify training data correctness.
+
+
+
+X = np.array(contexts)
+Y = np.array(targets)
+
+
+
+Convert lists to NumPy arrays for training.
+
+
+X = inputs (shape: samples × 4)
+
+
+Y = outputs (shape: samples, )
+
+
+
+
+
+Model Architecture — CBOW using Keras
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Embedding, Lambda
+from tensorflow.keras import backend as K
+
+
+
+Sequential: simple stack model.
+
+
+Dense: fully connected layer.
+
+
+Embedding: converts integer word IDs to dense vectors.
+
+
+Lambda: lets you define custom layer operations (here, averaging embeddings).
+
+
+K: backend operations if needed (TensorFlow math functions).
+
+
+
+🧠 Building the CBOW Model
+model = Sequential([
+    Embedding(input_dim=vocab_size, output_dim=emb_size, input_length=2*context_size),
+    Lambda(lambda x: tf.reduce_mean(x, axis=1)),
+    Dense(256, activation='relu'),
+    Dense(512, activation='relu'),
+    Dense(vocab_size, activation='softmax')
+])
+
+Line-by-line:
+
+
+Embedding(input_dim=vocab_size, output_dim=emb_size, input_length=2*context_size)
+
+
+Converts input word indices → embedding vectors.
+
+
+input_dim: number of unique words.
+
+
+output_dim: embedding size (10 here).
+
+
+input_length: context length (4 words total for 2 before + 2 after).
+
+
+Why Embedding? Learns dense vector representations (word embeddings) during training.
+
+
+Exam phrase: “Embedding layer transforms sparse word IDs into learnable dense vectors.”
+
+
+
+
+
+Lambda(lambda x: tf.reduce_mean(x, axis=1))
+
+
+Takes the mean of all context embeddings → single averaged vector (CBOW assumption: bag of words).
+
+
+Exam: “Lambda layer averages the embeddings of context words.”
+
+
+
+
+
+
+
+Dense(256, activation='relu')
+
+
+Dense(512, activation='relu')
+
+
+Two hidden fully-connected layers to learn complex non-linear patterns.
+
+
+ReLU: Rectified Linear Unit → f(x)=max(0,x)f(x)=max(0,x)f(x)=max(0,x)
+
+
+Exam: “Dense layers capture relationships between averaged context and target.”
+
+
+
+
+
+
+
+Dense(vocab_size, activation='softmax')
+
+
+Output layer → predicts probability of every word in the vocabulary being the target word.
+
+
+Softmax: ensures probabilities sum to 1.
+
+
+Exam: “Softmax converts network output into a probability distribution over vocabulary.”
+
+
+
+
+
+model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+
+
+Loss: Sparse categorical crossentropy (for integer class labels).
+
+
+Optimizer: Adam (adaptive learning rate).
+
+
+Metric: Accuracy for training feedback.
+
+
+Exam phrase:
+
+“We compile with Adam optimizer and crossentropy loss because it’s a multi-class classification problem.”
+
+
+model.fit(X, Y, epochs=200, verbose=0)
+
+
+
+Train model for 200 epochs silently (verbose=0).
+
+
+Learns embeddings + dense layer weights to minimize loss.
+
+
+
+Visualization
+import seaborn as sns
+sns.lineplot(model.history.history)
+
+
+
+Plots the history dictionary (loss, accuracy vs epoch).
+(Note: should use pd.DataFrame(model.history.history) for proper plotting.)
+
+
+
+Prediction on Test Sentences
+test_sentenses = [
+    "known as structured learning",
+    "transformers have applied to",
+    "where they produced results",
+    "cases surpassing expert performance"
+]
+
+
+
+List of small test contexts to check model predictions.
+
+
+
+for sent in test_sentenses:
+    test_words = sent.split(" ")
+    x_test = []
+    for i in test_words:
+        x_test.append(word_to_index.get(i))
+    x_test = np.array([x_test])
+
+    pred = model.predict(x_test)
+    pred = np.argmax(pred[0])
+    print("pred ", test_words, "\n=", index_to_word.get(pred),"\n\n")
+
+Explanation:
+
+
+For each test phrase:
+
+
+Convert words → indices.
+
+
+Predict using trained model.
+
+
+np.argmax(pred[0]) → ID of word with highest predicted probability.
+
+
+index_to_word.get(pred) → Convert back to actual word.
+
+
+
+
+✅ Model predicts the most likely central word for that context.
+
+🧩 Summary Table (Viva-ready)
+ConceptDescriptionKey KeywordWord EmbeddingDense representation of words in vector spaceSemantic similarityCBOW ModelPredicts center word from contextWord2Vec architectureTokenizerConverts words → indicesPreprocessingEmbedding LayerLearns dense word vectorsRepresentation learningLambda LayerAverages embeddingsCBOW “bag of words”Dense LayerFully connected neural layerFeature learningSoftmaxConverts logits → probabilitiesMulti-class outputLossSparse categorical crossentropyClassification lossOptimizerAdam (adaptive SGD)Faster convergenceContext WindowWords before & after targetCBOW windowReconstruction GoalContext → Target wordCore idea
+
+✅ Short viva line you can say:
+
+“I implemented a CBOW-based word embedding model. It uses an Embedding layer to represent words, averages context embeddings using a Lambda layer, passes them through Dense layers, and uses a softmax output to predict the central word. The model learns semantic relationships between words automatically.”
+
+
+Would you like me to next:
+
+
+Add inline comments to your code (every line explained right inside it for submission),
+or
+
+
+Give a short viva script (under 1 minute) summarizing how to explain this entire practical orally?
+

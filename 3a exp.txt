@@ -1,0 +1,794 @@
+To build and train an Image Classification Model using Convolutional Neural Networks (CNNs) on the CIFAR-10 dataset and evaluate its performance.
+
+
+
+
+
+
+> **Note (important):** your code as pasted has a few small issues:
+>
+> * **Images are not normalized** before training (CIFAR pixel range 0–255). You should divide `x_train` and `x_test` by 255.0.
+> * You use `df` for plotting but never define it; create `df = pd.DataFrame(history.history)`.
+> * You use `np` before importing it (you import `numpy as np` later) — import `numpy` earlier.
+>
+> I’ll point these out where relevant and show the tiny fixes.
+
+---
+
+## Line-by-line explanation (with short viva phrases)
+
+```python
+import tensorflow as tf
+from tensorflow import keras
+from keras import layers, models
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+```
+
+* **What:** Import libraries.
+
+  * `tensorflow` / `keras`: core deep learning framework and high-level API.
+  * `layers, models`: convenient access to layers (Conv2D, Dense) and model types (Sequential).
+  * `matplotlib.pyplot as plt`: plotting graphs and images.
+  * `seaborn` and `pandas`: optional nicer plotting and data handling (you use `pandas` later).
+* **Exam phrase:** “I import TensorFlow/Keras for model building and matplotlib/pandas for visualization and result analysis.”
+
+---
+
+```python
+(x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+```
+
+* **What:** Load CIFAR-10 dataset (built into Keras).
+
+  * `x_train` shape: (50000, 32, 32, 3), `y_train` shape: (50000, 1).
+  * `x_test` shape: (10000, 32, 32, 3).
+* **Why:** CIFAR-10 is a standard small-color image dataset with 10 classes.
+* **Exam phrase:** “I load CIFAR-10 which provides 50k training and 10k test images of size 32×32×3.”
+
+---
+
+```python
+dim = x_train[0].shape
+```
+
+* **What:** Save the shape of a single image (`(32, 32, 3)`) in `dim`.
+* **Why:** Useful when specifying `input_shape` for `Conv2D`.
+* **Exam phrase:** “I capture the image shape to pass as input shape to the model.”
+
+---
+
+```python
+class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
+               'dog', 'frog', 'horse', 'ship', 'truck']
+```
+
+* **What:** Human-readable class labels for CIFAR-10 numeric labels (0–9).
+* **Why:** Use these while showing images or interpreting predictions.
+* **Exam phrase:** “These names map numeric labels to class names for visualization.”
+
+---
+
+```python
+plt.figure(figsize=(6, 6))
+for i in range(9):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow(x_train[i])
+    plt.title(class_names[y_train[i][0]])
+    plt.axis('off')
+plt.show()
+```
+
+* **What:** Visualize first 9 training images in a 3×3 grid with titles.
+* **Why:** Quick sanity check that data loaded correctly and labels align with images.
+* **Exam phrase:** “I visualize examples to ensure the dataset loaded correctly and the labels match images.”
+
+---
+
+### (Commented-out AlexNet-like block)
+
+```python
+# commented one is too slow it is alexnet
+# model = models.Sequential([
+#     layers.Conv2D(64, (3,3), padding='same', activation='relu', input_shape = dim),
+#     ...
+#     layers.Dense(len(class_names), activation='softmax')
+# ])
+```
+
+* **What:** A larger AlexNet-like architecture was drafted but commented out.
+* **Why:** You noted it’s slow — keeping it commented is fine for constrained hardware.
+* **Exam phrase:** “I considered a deeper AlexNet-style model but commented it out due to compute/time limits.”
+
+---
+
+### Simpler (active) model definition
+
+```python
+model = models.Sequential([
+    layers.Conv2D(64, (3,3), activation='relu', padding='same', input_shape=(32,32,3)),
+    layers.MaxPooling2D((2,2)),
+    layers.Conv2D(128, (3,3), activation='relu', padding='same'),
+    layers.MaxPooling2D((2,2)),
+    layers.Conv2D(256, (3,3), activation='relu', padding='same'),
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(256, activation='relu'),
+    layers.Dropout(0.5),
+    layers.Dense(10, activation='softmax')
+])
+```
+
+* **Layer-by-layer explanation & why:**
+
+  1. `Sequential([...])` — stack layers in order (good for straightforward feed-forward models).
+
+     * *Viva line:* “Sequential stacks layers from input to output in order.”
+  2. `Conv2D(64, (3,3), activation='relu', padding='same', input_shape=(32,32,3))`
+
+     * 64 filters, each 3×3. `padding='same'` keeps spatial size.
+     * `input_shape=(32,32,3)` tells network input image dimensions.
+     * *Concept:* Convolution extracts local features (edges, textures).
+     * *Viva line:* “First conv extracts low-level features with ReLU nonlinearity.”
+  3. `MaxPooling2D((2,2))`
+
+     * Downsamples by 2 (32→16), reduces spatial size & computation.
+     * *Viva line:* “Pooling reduces spatial resolution and gives translation invariance.”
+  4. `Conv2D(128, (3,3), activation='relu', padding='same')`
+
+     * Deeper filters (128) learn more complex features.
+  5. `MaxPooling2D((2,2))`
+
+     * Further downsampling (16→8).
+  6. `Conv2D(256, (3,3), activation='relu', padding='same')`
+
+     * Even deeper representation.
+  7. `GlobalAveragePooling2D()`
+
+     * Averages each feature map to one number → reduces parameters vs flattening.
+     * *Viva line:* “Global average pooling summarizes each feature map, reducing overfitting and parameters.”
+  8. `Dense(256, activation='relu')`
+
+     * Fully connected layer that mixes features to form higher-level concepts.
+  9. `Dropout(0.5)`
+
+     * Randomly turns off 50% neurons during training to prevent overfitting.
+     * *Viva line:* “Dropout regularizes the model by reducing co-adaptation of neurons.”
+
+10. `Dense(10, activation='softmax')`
+
+    * Output layer with 10 units (classes) and softmax to produce class probabilities.
+    * *Viva line:* “Softmax gives a probability distribution across classes.”
+
+---
+
+```python
+model.compile(
+    optimizer=keras.optimizers.SGD(learning_rate=0.01),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+```
+
+* **What:** Prepare the model for training.
+
+  * `optimizer=SGD(learning_rate=0.01)`: Stochastic Gradient Descent with LR 0.01.
+
+    * **SGD concept (short):** update weights in the negative gradient direction computed on mini-batches.
+    * *Viva line:* “I use SGD: simple, reliable optimizer where weight updates = -learning_rate × gradient.”
+  * `loss='sparse_categorical_crossentropy'`: Loss for integer-encoded multi-class labels (no one-hot required).
+
+    * *Viva line:* “Sparse cross-entropy measures discrepancy between predicted probabilities and true integer labels.”
+  * `metrics=['accuracy']`: Track accuracy during training and validation.
+
+    * *Viva line:* “Accuracy shows proportion of correct predictions per epoch.”
+
+---
+
+```python
+history = model.fit(x_train, y_train, epochs=10, batch_size=128, validation_split=0.2)
+```
+
+* **What:** Train the model.
+
+  * `epochs=10`: number of full passes over training data.
+  * `batch_size=128`: number of samples per gradient update.
+  * `validation_split=0.2`: hold out 20% of training data for validation each epoch.
+* **Important missing step (bug):** **Normalization** — you should scale `x_train` and `x_test` to [0,1] by dividing by 255.0 **before** calling `.fit(...)`.
+
+  * Fix:
+
+    ```python
+    x_train = x_train.astype('float32') / 255.0
+    x_test  = x_test.astype('float32') / 255.0
+    ```
+  * *Viva line:* “Normalize pixels to [0,1] to stabilize training (gradient magnitudes).”
+* **Exam phrase:** “I train using mini-batch SGD for multiple epochs and keep a validation split to monitor generalization.”
+
+---
+
+```python
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
+print(f"Test Accuracy: {test_acc:.4f}, Test Loss: {test_loss:.4f}")
+```
+
+* **What:** Evaluate the trained model on the test set to get unbiased performance metrics.
+* **Important:** If you forgot normalization before training and testing, ensure `x_test` used here is normalized the same way as training data.
+* **Viva line:** “I evaluate on test data which was unseen during training to estimate generalization.”
+
+---
+
+### Plotting loss (issue spotted)
+
+```python
+plt.figure(figsize=(12, 4))
+
+plt.plot(df['loss'], label='Training Loss')
+plt.plot(df['val_loss'], label='Validation Loss')
+
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Training vs Validation Loss')
+plt.legend()
+plt.grid(True)
+
+plt.show()
+```
+
+* **What intended:** Plot training & validation loss across epochs using `history`.
+* **Bug:** `df` is undefined in your code. Create it from `history`:
+
+  ```python
+  df = pd.DataFrame(history.history)
+  ```
+
+  or directly use `history.history['loss']` and `history.history['val_loss']`.
+* **Viva line:** “Plotting loss curves helps detect underfitting (both high) or overfitting (train loss ↓, val loss ↑).”
+
+---
+
+### Plotting accuracy
+
+```python
+plt.figure(figsize=(12, 4))
+
+plt.plot(df['accuracy'], label='Training Accuracy', linewidth=2)
+plt.plot(df['val_accuracy'], label='Validation Accuracy', linewidth=2)
+
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.title('Training vs Validation Accuracy')
+
+plt.legend()
+plt.grid(alpha=0.3)
+plt.tight_layout()
+
+plt.show()
+```
+
+* **What:** Plot training & validation accuracy.
+* **Again:** make sure `df` exists (`df = pd.DataFrame(history.history)`) or plot from `history.history` directly.
+* **Viva line:** “If training acc >> validation acc, the model is overfitting; if both low, the model is underfitting.”
+
+---
+
+```python
+img = x_test[0].astype('float32') / 255.0
+pred = model.predict(np.expand_dims(img, axis=0))
+print(class_names[pred.argmax()])
+plt.figure(figsize=(6, 6))
+plt.imshow(x_test[0])
+```
+
+* **Step-by-step:**
+
+  * `img = x_test[0].astype('float32') / 255.0` — normalize single test image for prediction. (Good — but if model was trained on unnormalized data this will mismatch.)
+  * `np.expand_dims(img, axis=0)` — convert shape (32,32,3) → (1,32,32,3) so `predict` expects a batch.
+  * `model.predict(...)` returns probabilities; `pred.argmax()` gives index of highest probability → predicted class.
+  * `plt.imshow(x_test[0])` displays the original test image (note: if you normalized earlier, raw pixel values were floats — matplotlib handles both).
+* **Bug/Consistency note:** Be consistent: if you trained on normalized images, prediction should use normalized images; if trained on raw 0–255, predict on raw values too. Always keep training and prediction preprocessing identical.
+* **Viva line:** “To predict, I reshape a single image into a batch and call `model.predict`, then map the argmax to a class name.”
+
+---
+
+```python
+from sklearn.metrics import classification_report, confusion_matrix
+import numpy as np
+predictions = model.predict(x_test)
+predicted_classes = np.argmax(predictions, axis=1)
+print(classification_report(y_test, predicted_classes))
+```
+
+* **What:**
+
+  * Import metrics utilities from scikit-learn and `numpy`.
+  * `model.predict(x_test)` — produces class probabilities for all test images (ensure `x_test` preprocessed correctly).
+  * `np.argmax(predictions, axis=1)` — convert probabilities to predicted class indices.
+  * `classification_report(y_test, predicted_classes)` — prints precision, recall, F1-score per class.
+* **Note:** `y_test` shape may be (10000,1) — ensure it's a 1D array for `classification_report` (use `y_test.flatten()` if needed).
+* **Viva lines:**
+
+  * **Precision:** “Of all predicted class X, what fraction were actually X.”
+  * **Recall:** “Of all actual class X samples, what fraction did we predict as X.”
+  * **F1-score:** “Harmonic mean of precision and recall — good single-number measure per class.”
+
+---
+
+## Summary of bugs and minimal fixes (copy-paste these into your script)
+
+1. **Import numpy earlier**
+
+```python
+import numpy as np
+```
+
+2. **Normalize data before training**
+
+```python
+x_train = x_train.astype('float32') / 255.0
+x_test  = x_test.astype('float32') / 255.0
+```
+
+3. **Create df for plotting (or use history directly)**
+
+```python
+df = pd.DataFrame(history.history)
+# OR plot from history.history directly:
+# plt.plot(history.history['loss'])
+```
+
+4. **Flatten y_test if needed for classification_report**
+
+```python
+y_test_flat = y_test.flatten()
+print(classification_report(y_test_flat, predicted_classes))
+```
+
+5. **Keep preprocessing consistent** (train and test must be normalized the same way).
+
+---
+
+## Short viva-ready cheat-lines you can memorize
+
+* **Why Conv2D?** — “Convolution finds local features (edges, textures) using trainable filters.”
+* **Why MaxPool?** — “It downsamples and provides translation invariance while reducing parameters.”
+* **Why GlobalAveragePooling?** — “It reduces parameters and overfitting by averaging feature maps instead of flattening.”
+* **Why Dropout?** — “It prevents overfitting by randomly dropping neurons during training.”
+* **Why SGD?** — “SGD updates weights using mini-batch gradients; it’s simple and memory-efficient.”
+* **Why softmax + cross-entropy?** — “Softmax gives class probabilities; cross-entropy measures difference between predicted probabilities and true labels.”
+
+---
+
+
+
+
+
+
+
+
+
+
+🧠 Concept Overview — What is Image Classification?
+
+Image classification means assigning a label or category to an input image.
+Example: a model looks at an image and predicts whether it’s a cat, dog, car, etc.
+
+It’s a supervised learning problem because we train the model with labeled images.
+
+To handle images efficiently, we use Convolutional Neural Networks (CNNs) instead of simple feedforward networks (FFNs).
+
+🧩 Why CNN (Convolutional Neural Network)?
+
+CNNs are specifically designed for image data.
+They can:
+
+Detect local patterns like edges, textures, and colors.
+
+Learn complex features as we go deeper (like object parts or shapes).
+
+Preserve spatial structure using convolution and pooling.
+
+In short:
+
+“CNN automatically extracts features from images instead of us doing manual feature extraction.”
+
+📘 Theory — CNN Working Principle (simplified for viva)
+
+CNN has mainly three types of layers:
+
+Convolutional Layer
+
+Applies small filters (e.g., 3×3) that slide over the image.
+
+Extracts local features like edges and textures.
+
+Each filter creates a feature map.
+
+Formula for convolution:
+
+(
+𝐼
+∗
+𝐾
+)
+(
+𝑥
+,
+𝑦
+)
+=
+∑
+𝑚
+∑
+𝑛
+𝐼
+(
+𝑥
++
+𝑚
+,
+𝑦
++
+𝑛
+)
+⋅
+𝐾
+(
+𝑚
+,
+𝑛
+)
+(I∗K)(x,y)=
+m
+∑
+	​
+
+n
+∑
+	​
+
+I(x+m,y+n)⋅K(m,n)
+
+Exam line: “Convolution captures local patterns using filters.”
+
+Pooling Layer
+
+Reduces spatial size (downsampling) to make computation efficient and reduce overfitting.
+
+MaxPooling takes the maximum value in each region.
+
+Exam line: “Pooling summarizes nearby pixels and reduces dimensions.”
+
+Fully Connected (Dense) Layers
+
+Flatten the feature maps into a 1D vector.
+
+Combine extracted features to classify into classes using Softmax.
+
+Exam line: “Dense layers perform final classification based on learned features.”
+
+⚙️ Algorithm / Workflow — Stage-wise
+Stage (a): Loading and Preprocessing the Image Data
+
+Algorithm Steps:
+
+Import required libraries (tensorflow, keras, matplotlib, etc.).
+
+Load dataset → CIFAR-10 (contains 60,000 images, 32×32 pixels, 10 classes).
+
+Split data → training set (50,000) and test set (10,000).
+
+Normalize pixel values by dividing by 255 (to convert [0–255] → [0–1]).
+
+(Optional) Visualize sample images with class labels.
+
+Concept:
+
+Normalization helps faster convergence during training.
+
+Visualization confirms correct loading and class balance.
+
+Exam phrase:
+
+“In preprocessing, we scale pixel values and reshape data so that neural networks can process it efficiently.”
+
+Stage (b): Defining the Model’s Architecture
+
+Here we build a Convolutional Neural Network (CNN).
+
+Algorithm Steps:
+
+Use Sequential() model — a linear stack of layers.
+
+Add convolutional + pooling layers to extract features:
+
+Conv2D(64, (3,3), activation='relu', padding='same')
+
+MaxPooling2D((2,2))
+
+Repeat with deeper filters (128, 256) to capture more complex patterns.
+
+Use GlobalAveragePooling2D() to reduce feature maps to a single vector.
+
+Add Dense layers:
+
+Dense(256, activation='relu') — hidden layer for combining features.
+
+Dropout(0.5) — to avoid overfitting.
+
+Dense(10, activation='softmax') — output layer for 10 classes.
+
+Concepts to explain:
+
+ReLU: Rectified Linear Unit → f(x) = max(0, x). Prevents vanishing gradients.
+
+Softmax: Converts output scores into probabilities that sum to 1.
+
+Dropout: Randomly turns off neurons during training to prevent overfitting.
+
+Exam phrase:
+
+“The CNN architecture extracts features through convolution and pooling, and classifies using dense layers with softmax at the end.”
+
+Stage (c): Training the Model
+
+Algorithm Steps:
+
+Compile the model:
+
+model.compile(
+    optimizer=keras.optimizers.SGD(learning_rate=0.01),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+
+Train the model using:
+
+model.fit(x_train, y_train, epochs=10, batch_size=128, validation_split=0.2)
+
+
+Concepts to explain:
+
+SGD (Stochastic Gradient Descent):
+
+Optimizer that updates weights using mini-batches of data.
+
+Formula:
+
+𝑤
+:
+=
+𝑤
+−
+𝜂
+∂
+𝐿
+∂
+𝑤
+w:=w−η
+∂w
+∂L
+	​
+
+
+where η = learning rate.
+
+Exam phrase: “SGD updates weights gradually based on batch gradients to minimize loss.”
+
+Loss function:
+
+Sparse Categorical Crossentropy measures the difference between predicted probabilities and true class.
+
+Used for multi-class problems when labels are integer encoded.
+
+Exam phrase: “Crossentropy penalizes wrong confident predictions, helping the network learn correct probabilities.”
+
+Validation split (0.2):
+
+20% data used to check how well the model generalizes (avoiding overfitting).
+
+Epoch: One full pass through training data.
+
+Batch size: Number of samples processed before weights are updated.
+
+Stage (d): Estimating the Model’s Performance
+
+Algorithm Steps:
+
+Evaluate test accuracy and loss using:
+
+model.evaluate(x_test, y_test)
+
+
+Plot training vs validation loss and accuracy using matplotlib.
+
+Predict on test images and display sample predictions.
+
+Generate classification report and confusion matrix for deeper analysis.
+
+Concepts:
+
+Accuracy: % of correctly classified images.
+
+Confusion Matrix: shows which classes were misclassified.
+
+Classification Report: gives precision, recall, and F1-score for each class.
+
+Exam phrase:
+
+“I evaluate performance using test accuracy, visualize loss and accuracy curves, and check classification metrics to analyze errors.”
+
+🧮 Summary Table (For Quick Viva Recap)
+Stage	Steps	Key Concepts	Keywords to Say
+(a) Loading & Preprocessing	Load data, normalize, visualize	Normalization, scaling	“Prepare and scale image data for model input.”
+(b) Model Architecture	Define CNN layers	Conv2D, Pooling, ReLU, Softmax, Dropout	“CNN extracts features and classifies with dense layers.”
+(c) Training	Compile, fit model	SGD, Loss, Epoch, Batch size	“Train using SGD and monitor loss & accuracy.”
+(d) Evaluation	Test, plot, predict	Accuracy, Confusion Matrix	“Evaluate model generalization on unseen data.”
+💡 Tips for Viva
+
+If examiner asks:
+
+Why CNN and not Feedforward?
+→ “Feedforward networks flatten images and lose spatial structure. CNN preserves spatial relationships using filters.”
+
+Why ReLU?
+→ “It’s simple, avoids vanishing gradient, and trains faster.”
+
+Why Softmax?
+→ “To get normalized class probabilities for multi-class classification.”
+
+Why SGD and not Adam?
+→ “SGD is simple, stable, and good for demonstrating gradient descent basics.”
+
+What is overfitting?
+→ “When training accuracy is high but validation accuracy is low. Model memorizes training data instead of generalizing.”
+
+What does Dropout do?
+→ “Randomly disables some neurons during training to prevent overfitting.”
+
+
+
+
+
+
+
+
+
+import numpy as np                       # <-- Import numpy early (fix)
+import tensorflow as tf
+from tensorflow import keras
+from keras import layers, models
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from sklearn.metrics import classification_report, confusion_matrix
+
+# -----------------------
+# Load dataset
+# -----------------------
+(x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+
+# -----------------------
+# NECESSARY FIX: Normalize images to [0,1]
+# This must be done before training and before prediction,
+# so train & inference preprocessing are identical.
+# -----------------------
+x_train = x_train.astype('float32') / 255.0
+x_test  = x_test.astype('float32') / 255.0
+
+# -----------------------
+# Save image shape and class names
+# -----------------------
+dim = x_train[0].shape                     # (32, 32, 3)
+class_names = ['airplane', 'automobile', 'bird', 'cat', 'deer',
+               'dog', 'frog', 'horse', 'ship', 'truck']
+
+# -----------------------
+# Visualize some training images (sanity check)
+# -----------------------
+plt.figure(figsize=(6, 6))
+for i in range(9):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow((x_train[i] * 255).astype('uint8'))   # show denormalized for correct colors
+    plt.title(class_names[y_train[i][0]])
+    plt.axis('off')
+plt.show()
+
+# -----------------------
+# Model (your simpler AlexNet-like CNN)
+# -----------------------
+model = models.Sequential([
+    layers.Conv2D(64, (3,3), activation='relu', padding='same', input_shape=(32,32,3)),
+    layers.MaxPooling2D((2,2)),
+    layers.Conv2D(128, (3,3), activation='relu', padding='same'),
+    layers.MaxPooling2D((2,2)),
+    layers.Conv2D(256, (3,3), activation='relu', padding='same'),
+    layers.GlobalAveragePooling2D(),
+    layers.Dense(256, activation='relu'),
+    layers.Dropout(0.5),
+    layers.Dense(10, activation='softmax')
+])
+
+# -----------------------
+# Compile model
+# -----------------------
+model.compile(
+    optimizer=keras.optimizers.SGD(learning_rate=0.01),   # you can add momentum if desired
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# -----------------------
+# Train model
+# -----------------------
+history = model.fit(x_train, y_train, epochs=10, batch_size=128, validation_split=0.2)
+
+# -----------------------
+# Evaluate on test set
+# -----------------------
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
+print(f"Test Accuracy: {test_acc:.4f}, Test Loss: {test_loss:.4f}")
+
+# -----------------------
+# Prepare DataFrame from history for plotting (fix for undefined df)
+# -----------------------
+df = pd.DataFrame(history.history)
+
+# -----------------------
+# Plot Loss
+# -----------------------
+plt.figure(figsize=(12, 4))
+plt.plot(df['loss'], label='Training Loss')
+plt.plot(df['val_loss'], label='Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Training vs Validation Loss')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# -----------------------
+# Plot Accuracy
+# -----------------------
+plt.figure(figsize=(12, 4))
+plt.plot(df['accuracy'], label='Training Accuracy', linewidth=2)
+plt.plot(df['val_accuracy'], label='Validation Accuracy', linewidth=2)
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.title('Training vs Validation Accuracy')
+plt.legend()
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# -----------------------
+# Single image prediction (consistent preprocessing)
+# Note: x_test is already normalized, so use directly.
+# For display, denormalize when showing with imshow.
+# -----------------------
+img = x_test[0]                              # already normalized
+pred = model.predict(np.expand_dims(img, axis=0))
+print("Predicted class:", class_names[pred.argmax()])
+
+plt.figure(figsize=(6, 6))
+plt.imshow((img * 255).astype('uint8'))      # display original-looking image
+plt.title(f"Predicted: {class_names[pred.argmax()]}")
+plt.axis('off')
+plt.show()
+
+# -----------------------
+# Full-test predictions + classification report
+# -----------------------
+predictions = model.predict(x_test)                 # probabilities
+predicted_classes = np.argmax(predictions, axis=1)
+
+# Flatten y_test for sklearn (if shape is (N,1))
+y_test_flat = y_test.flatten()
+
+print("Classification report:")
+print(classification_report(y_test_flat, predicted_classes, target_names=class_names))
+
+# Optional: confusion matrix (large printed table)
+cm = confusion_matrix(y_test_flat, predicted_classes)
+print("Confusion matrix shape:", cm.shape)

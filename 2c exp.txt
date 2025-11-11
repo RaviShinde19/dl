@@ -1,0 +1,300 @@
+Line-by-line explanation (simple language + examiner-ready phrases)
+pip install tensorflow
+
+What it does: Installs TensorFlow (the library that includes Keras).
+
+Exam phrase: “I installed TensorFlow so I can use Keras APIs for building and training neural networks.”
+
+import tensorflow as tf
+
+What it does: Brings TensorFlow into the program and names it tf (convention).
+
+Why: Some advanced utilities are under tf, even if we mainly use keras.
+
+Exam phrase: “I import TensorFlow as tf because it’s the core deep learning framework.”
+
+from tensorflow import keras
+
+What it does: Imports Keras (high-level neural-network API inside TensorFlow).
+
+Why: Keras makes building models simple with readable code.
+
+Exam phrase: “Keras provides a user-friendly API to create layers and models.”
+
+from keras import layers, models
+
+What it does: Imports classes to create layers and model types (Sequential, etc).
+
+Exam phrase: “layers provides Dense, Dropout etc., and models provides Sequential.”
+
+import matplotlib.pyplot as plt
+
+What it does: Imports plotting library to draw training graphs.
+
+Exam phrase: “I use matplotlib to visualize loss and accuracy.”
+
+import seaborn as sns and import pandas as pd
+
+What they do: Seaborn and pandas are for prettier plots and data handling.
+
+Note: In your script these are imported but not used — that’s okay but you can remove them if not needed.
+
+Exam phrase: “I imported seaborn/pandas for optional nicer plots / dataframes.”
+
+Data loading
+(x_train, y_train), (x_test, y_test) = keras.datasets.mnist.load_data()
+# (x_train, y_train), (x_test, y_test) = keras.datasets.cifar10.load_data()
+
+
+What it does: Loads the MNIST dataset. x_train and x_test are images; y_train/y_test are labels (digits 0–9).
+
+Why MNIST: Simple handwritten-digit dataset for classification practice.
+
+Exam phrase: “I load MNIST which contains 60k training and 10k test 28×28 grayscale images labeled 0–9.”
+
+dim = x_train[0].size
+
+What it does: Gets the number of pixels in one image (28×28 = 784).
+
+Why: We will flatten each image into a 1D vector of length dim so it can be fed to a dense layer.
+
+Exam phrase: “I flatten the 2D image into a 1D vector of size 784 for the feedforward network.”
+
+Flattening and scaling
+x_train = x_train.reshape((x_train.shape[0], dim)).astype("float32") / 255
+x_test = x_test.reshape((x_test.shape[0], dim)).astype("float32") / 255
+
+
+What it does (step by step):
+
+reshape(...) converts each (28,28) image into a 784-length vector.
+
+astype("float32") ensures numeric type is float (required by the model).
+
+/ 255 scales pixel values from 0–255 to 0–1.
+
+Why scaling: Neural networks train faster and more stably when inputs are small and on a similar scale.
+
+Exam phrase: “I flatten images and normalize pixel values to [0,1] which helps gradient descent converge faster.”
+
+y_train = y_train.flatten() and y_test = y_test.flatten()
+
+What it does: Ensures labels are a 1D array (shape (N,)) rather than (N,1) sometimes returned by datasets.
+
+Why: sparse_categorical_crossentropy expects labels in integer form as 1D.
+
+Exam phrase: “I flatten labels to match the expected shape for sparse categorical loss.”
+
+Model definition (architecture)
+model = models.Sequential([
+    layers.Dense(256, activation='relu',  input_shape=(dim,)),
+    layers.Dense(128, activation='relu'),
+    layers.Dense(10, activation='softmax')
+])
+
+
+Sequential: A simple linear stack of layers — input → layer1 → layer2 → output.
+
+Exam phrase: “Sequential stacks layers in order, appropriate for feedforward MLPs.”
+
+layers.Dense(256, activation='relu', input_shape=(dim,)):
+
+Dense layer: fully-connected layer with 256 neurons.
+
+input_shape=(dim,): tells the model the input vector size (784).
+
+activation='relu': ReLU activation (explained below).
+
+Exam phrase: “First dense layer has 256 units and uses ReLU to add nonlinearity.”
+
+layers.Dense(128, activation='relu'): second hidden layer with 128 neurons and ReLU.
+
+layers.Dense(10, activation='softmax'): output layer with 10 neurons (one per class) and softmax activation.
+
+Softmax: converts raw scores to probabilities that sum to 1 across classes.
+
+Exam phrase: “Output uses softmax to produce class probabilities for 10 classes.”
+
+Concepts here:
+
+Dense (Fully-connected) layer: each neuron connects to every neuron in previous layer. Good for tabular data; for images CNNs are usually better but MLP is a good baseline.
+
+Activation function (ReLU): ReLU(x) = max(0,x). Adds nonlinearity so the network can learn complex functions.
+
+Exam phrase for ReLU: “ReLU speeds up training and avoids vanishing gradients for positive activations.”
+
+Softmax + categorical interpretation: softmax gives normalized probabilities; we use cross-entropy loss to compare predicted probs with true labels.
+
+Compiling the model
+model.compile(
+    optimizer=keras.optimizers.SGD(learning_rate=0.01),
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+
+optimizer=SGD(learning_rate=0.01)
+
+What SGD is: Stochastic Gradient Descent — it updates weights in the negative direction of the gradient computed on small batches of data.
+
+What learning_rate=0.01 does: step size for each update. Too large → diverge, too small → slow training.
+
+Exam phrase for SGD (short): “SGD updates weights by moving them opposite to gradients computed on mini-batches. It’s simple, effective, and easy to explain in viva.”
+
+Add-on note you can say: “We could add momentum (momentum=0.9) to accelerate training and smooth updates, but this example uses vanilla SGD.”
+
+loss='sparse_categorical_crossentropy'
+
+What it is: Loss function for multi-class classification when labels are integers (0..9).
+
+Difference from categorical_crossentropy: categorical_crossentropy expects one-hot encoded labels; sparse_categorical_crossentropy accepts integer labels directly.
+
+Exam phrase: “I use sparse categorical crossentropy because labels are integer encoded, not one-hot.”
+
+metrics=['accuracy']
+
+What it does: Track accuracy during training/validation for monitoring.
+
+Exam phrase: “I monitor accuracy to see classifier performance per epoch.”
+
+Training the model
+history = model.fit(x_train, y_train, epochs=10, batch_size=128, validation_split=0.2)
+
+
+fit(...) starts training.
+
+epochs=10 — full passes over the training data. Each epoch processes every training sample once (split into batches).
+
+Exam phrase: “An epoch is one full pass through the training data.”
+
+batch_size=128 — number of samples used to compute one gradient update.
+
+Exam phrase: “With batch size 128, gradient is computed over 128 samples each update; this balances noise and speed.”
+
+validation_split=0.2 — 20% of the training data is held out as a validation set to monitor generalization during training.
+
+Exam phrase: “Validation split helps detect overfitting by checking model performance on unseen data each epoch.”
+
+history — returned object with per-epoch metrics (loss, val_loss, accuracy, val_accuracy) stored in history.history.
+
+Exam phrase: “The history object contains training and validation metrics for plotting and analysis.”
+
+Evaluating on test set
+test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
+print(f"Test Accuracy: {test_acc:.4f}, Test Loss: {test_loss:.4f}")
+
+
+evaluate(...) computes loss and metrics on the test set (unseen during training).
+
+Why: Final assessment of your trained model’s performance.
+
+Exam phrase: “I evaluate only on the test set after training to report final unbiased performance.”
+
+Plotting training/validation loss
+plt.figure(figsize=(12,4))
+# df = pd.DataFrame(history.history)
+# sns.lineplot(data=df[['loss', 'val_loss']])
+plt.plot(history.history["loss"], label="TLoss")
+plt.plot(history.history["val_loss"], label="VLoss")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.title("Training vs Validation Loss")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+What it does: Draws the training loss (loss) and validation loss (val_loss) curves across epochs.
+
+Why: Inspect convergence and overfitting:
+
+If training loss keeps decreasing but validation loss increases → overfitting.
+
+If both losses are high and not decreasing → underfitting or learning rate issues.
+
+Exam phrase: “Plotting loss curves helps me see if the model overfits (gap between train and val), or underfits (both high).”
+
+Extra small concept explanations you may need in viva
+What is SGD exactly? (a bit more detail)
+
+Full gradient vs stochastic: Full gradient = compute gradient on whole dataset (slow). SGD = compute on a small subset (mini-batch) so updates are frequent and faster.
+
+Behaviour: SGD introduces noise in updates which can help escape shallow local minima and can be faster per epoch.
+
+Typical tweaks: learning rate schedules, momentum, Nesterov momentum, or use optimizers like Adam which adapt learning rates.
+
+Exam phrase: “SGD uses mini-batches to compute noisy estimates of gradients, allowing faster and scalable training. Learning rate controls step size; momentum can accelerate convergence.”
+
+What is ReLU and why use it?
+
+Definition: ReLU(x) = max(0, x).
+
+Why: Simple, fast, helps avoid vanishing gradients for positive values.
+
+Exam phrase: “ReLU introduces nonlinearity while being computationally cheap and reducing vanishing gradient issues.”
+
+What is softmax?
+
+Definition: Converts a vector of raw scores into probabilities that sum to 1.
+
+Why: Useful for multi-class classification (gives class probabilities).
+
+Exam phrase: “Softmax turns logits into class probabilities for multi-class decision making.”
+
+What is cross-entropy loss?
+
+Idea: Measures difference between true label distribution and predicted probability distribution.
+
+Why: Penalizes confident wrong predictions heavily — good for classification.
+
+Exam phrase: “Cross-entropy quantifies how close predicted probabilities are to the true labels; minimizing it improves prediction probabilities.”
+
+What is validation split vs test set?
+
+Validation: used during training to tune hyperparameters and decide when to stop.
+
+Test: used once after training to report final performance.
+
+Exam phrase: “Validation set is for model selection and tuning; test set is for final unbiased evaluation.”
+
+Short checklist you can say in viva when asked about preprocessing/training steps
+
+Load data — get images and labels.
+
+Flatten images — convert 2D → 1D for MLP.
+
+Normalize pixels to [0,1].
+
+Build model — stack Dense + activations.
+
+Compile — choose optimizer (SGD), loss (sparse crossentropy), metrics.
+
+Train — epochs, batch size, validation split.
+
+Evaluate — compute test loss and accuracy.
+
+Plot — training vs validation loss to inspect overfitting.
+
+Extra tips & small improvements you can mention (optional)
+
+Use kernel_initializer='he_normal' for layers with ReLU (helps training).
+
+Add Dropout layers to reduce overfitting.
+
+Use SGD(momentum=0.9) for faster convergence.
+
+Try Adam optimizer for faster initial convergence (optimizer='adam').
+
+If using images normally, consider CNN (Convolutional Neural Network) instead of flattening.
+
+
+# Plot Training vs Validation Accuracy
+plt.figure(figsize=(12,4))
+plt.plot(history.history["accuracy"], label="Train Accuracy")
+plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
+plt.xlabel("Epochs")
+plt.ylabel("Accuracy")
+plt.title("Training vs Validation Accuracy")
+plt.legend()
+plt.grid(True)
+plt.show()

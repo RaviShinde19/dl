@@ -1,0 +1,1051 @@
+Theory & concepts — Autoencoder for anomaly detection (exam-friendly)
+
+Below is a compact, clear theory you can recite in viva, followed by a focused, deep explanation of (c) Encoder → latent representation as you asked.
+
+High-level idea (one-paragraph)
+
+An autoencoder is a neural network trained to reconstruct its input. It has two parts: an encoder that compresses input to a low-dimensional latent vector, and a decoder that reconstructs the original input from that latent vector. For anomaly detection, we train the autoencoder only (or mostly) on normal data so it learns to compress & reconstruct normal patterns well. At test time, samples that the model reconstructs poorly (large reconstruction error) are flagged as anomalies.
+
+Exam phrase: “Autoencoders learn a compact representation of normal data; unusually large reconstruction error at test time indicates an anomaly.”
+
+Stage-by-stage theory (a → e)
+a) Import required libraries
+
+Purpose: bring in tools for numerical ops, modeling, scaling, plotting, and metrics (numpy, pandas, tensorflow/keras, sklearn, matplotlib).
+
+Exam phrase: “We import libraries for model building (Keras), preprocessing (scaler), and evaluation (sklearn).”
+
+b) Upload / access dataset
+
+Load raw signals or images and inspect them.
+
+Split into train/test (and optionally validation). For anomaly detection, label info is necessary to decide which class is “normal”.
+
+Preprocessing: scale features (e.g., MinMax to [0,1]) so activations and losses behave numerically stable.
+
+Exam phrase: “Normalize features and split data so model trains on normal examples and is evaluated on unseen samples.”
+
+c) Encoder converts it into latent representation ← deep explanation below
+
+Short idea: encoder maps high-dimensional input 
+𝑥
+∈
+𝑅
+𝐷
+x∈R
+D
+ to a low-dimensional code 
+𝑧
+∈
+𝑅
+𝑑
+z∈R
+d
+ (with 
+𝑑
+≪
+𝐷
+d≪D), called the latent vector.
+
+Typical layer sequence: Dense/Conv → Activation (ReLU, tanh) → optional BatchNorm / Dropout → bottleneck layer.
+
+Purpose:
+
+Compression: force network to capture essential factors of variation (not noise).
+
+Feature extraction: learns high-level features that best reconstruct the input.
+
+Bottleneck: restricts capacity so the model cannot trivially copy input — it must learn structure.
+
+Mathematical view:
+
+Encoder is a function 
+𝑓
+𝜃
+:
+𝑅
+𝐷
+→
+𝑅
+𝑑
+f
+θ
+	​
+
+:R
+D
+→R
+d
+.
+
+In a feedforward encoder with layers:
+
+ℎ
+(
+1
+)
+=
+𝜙
+(
+𝑊
+(
+1
+)
+𝑥
++
+𝑏
+(
+1
+)
+)
+,
+ℎ
+(
+2
+)
+=
+𝜙
+(
+𝑊
+(
+2
+)
+ℎ
+(
+1
+)
++
+𝑏
+(
+2
+)
+)
+,
+𝑧
+=
+𝑊
+(
+𝐿
+)
+ℎ
+(
+𝐿
+−
+1
+)
++
+𝑏
+(
+𝐿
+)
+h
+(1)
+=ϕ(W
+(1)
+x+b
+(1)
+),h
+(2)
+=ϕ(W
+(2)
+h
+(1)
++b
+(2)
+),z=W
+(L)
+h
+(L−1)
++b
+(L)
+
+where 
+𝜙
+ϕ is an activation (ReLU), and 
+𝑧
+z is the latent code.
+
+Design choices & why:
+
+Latent dimension (latent_dim): smaller → stronger compression, easier to detect anomalies (but risk underfitting). Larger → better reconstruction but harder to separate anomalies.
+
+Activations: ReLU is common (nonlinear, avoids vanishing for positive values); sigmoid/tanh sometimes in final latent if bounded representation is desired.
+
+Dropout / BatchNorm: help generalization or stabilize training.
+
+Linear vs non-linear encoder: non-linear enables capturing complex patterns.
+
+Intuition for anomaly detection:
+
+The encoder learns how normal inputs map to the latent manifold. Anomalous inputs will map to latent codes the decoder hasn’t been trained to decode well, producing large reconstruction error.
+
+Exam phrase (short): “The encoder compresses input into a bottleneck latent vector that captures essential normal patterns — anomalies reconstruct poorly from that compact code.”
+
+d) Decoder converts it back to the original input
+
+Decoder is 
+𝑔
+𝜙
+:
+𝑅
+𝑑
+→
+𝑅
+𝐷
+g
+ϕ
+	​
+
+:R
+d
+→R
+D
+. It mirrors encoder (dense or conv transpose layers) and reconstructs 
+𝑥
+^
+=
+𝑔
+𝜙
+(
+𝑧
+)
+x
+^
+=g
+ϕ
+	​
+
+(z).
+
+Loss compares 
+𝑥
+^
+x
+^
+ to 
+𝑥
+x (MSE, MSLE, MAE). Training minimizes reconstruction error on normal data.
+
+Design choices:
+
+Output activation: sigmoid if inputs scaled to [0,1]; linear for unbounded real values.
+
+Use same capacity as encoder (symmetry often helps).
+
+Exam phrase: “Decoder learns to invert the encoder mapping to reconstruct inputs; poor reconstruction signals anomaly.”
+
+e) Compile the models (optimizer, loss, metrics)
+
+Optimizer: Adam or SGD. Adam = adaptive learning rates, good default.
+
+Exam phrase: “Adam adapts learning rates per parameter, often converges faster than vanilla SGD.”
+
+Loss: choose based on data & scale:
+
+MSE (mean squared error): common, per-sample squared difference averaged across features.
+
+MSLE: mean squared log error — useful if relative differences matter and values are >=0.
+
+MAE: less sensitive to outliers.
+
+For anomaly scoring we typically compute per-sample MSE to threshold.
+
+Metrics: track MSE, possibly MAE; at detection time use precision/recall/F1 since class imbalance is typical.
+
+Thresholding: pick a rule to label anomalies based on reconstruction error:
+
+Mean + k×std of train errors
+
+Percentile (e.g., 95th) of training normal errors
+
+ROC-based operating point (Youden’s J) or validation-based
+
+Exam phrase: “Compile with Adam and MSLE (or MSE). Use per-sample MSE as the anomaly score and choose threshold by percentile or statistical rule.”
+
+Training strategy and rationale
+
+Train only on normal data so the autoencoder models normal manifold well.
+
+Validation/thresholding: Hold out part of normal training data (or use training errors) to estimate a threshold.
+
+Why reconstruction error works: the autoencoder learns to reconstruct inputs lying on (or near) the learned manifold; anomalous inputs are off-manifold → larger reconstruction errors.
+
+Caveat: If anomalies are included in training or the model has too much capacity, it may reconstruct anomalies well → detection fails. Use regularization, smaller latent dim, or robust training.
+
+Thresholding & evaluation (practical exam points)
+
+Score: per-sample MSE 
+𝑠
+(
+𝑥
+)
+=
+1
+𝐷
+∑
+𝑖
+=
+1
+𝐷
+(
+𝑥
+𝑖
+−
+𝑥
+^
+𝑖
+)
+2
+s(x)=
+D
+1
+	​
+
+∑
+i=1
+D
+	​
+
+(x
+i
+	​
+
+−
+x
+^
+i
+	​
+
+)
+2
+.
+
+Label rule (example):
+
+normal if 
+𝑠
+(
+𝑥
+)
+≤
+𝑇
+s(x)≤T
+
+anomaly if 
+𝑠
+(
+𝑥
+)
+>
+𝑇
+s(x)>T
+
+Choose T by:
+
+𝑇
+=
+𝜇
+𝑡
+𝑟
+𝑎
+𝑖
+𝑛
++
+𝑘
+𝜎
+𝑡
+𝑟
+𝑎
+𝑖
+𝑛
+T=μ
+train
+	​
+
++kσ
+train
+	​
+
+ (k=1,2) — simple
+
+𝑇
+=
+T= percentile of training errors (e.g., 95th) — controls false positives
+
+ROC/Youden J — pick point maximizing TPR − FPR
+
+Metrics: precision, recall, F1 (prefer over accuracy when anomalies rare), ROC-AUC and PR-AUC as threshold-independent scores.
+
+Exam phrase: “Use reconstruction MSE as anomaly score, choose threshold by percentile or ROC; report precision and recall because of class imbalance.”
+
+Practical tips (one-liners to mention in viva)
+
+Normalize input to [0,1] or zero-mean unit variance before training.
+
+Use small latent dimension to force meaningful compression.
+
+Regularize (dropout, weight decay) to prevent trivial memorization.
+
+Consider convolutional autoencoders for image/time-series shape-aware encoding.
+
+Use percentile thresholding or validation-based selection for robust detection.
+
+Short worked example (how to explain your code’s c-part verbally)
+
+“In my code the encoder is a Sequential stack: Dense(64) → Dropout → Dense(32) → Dropout → Dense(16) → Dropout → Dense(latent_dim). Each Dense applies a linear transform followed by ReLU. The final latent Dense produces an 8-dimensional vector 
+𝑧
+z. This bottleneck forces the network to compress the ECG waveform into 8 numbers that best preserve the signal’s important structure for reconstruction by the decoder.”
+
+Quick Q&A prep (expected viva questions & short answers)
+
+Q: Why train on normal samples only?
+A: So the autoencoder learns the normal data manifold; anomalies will lie off-manifold and reconstruct poorly.
+
+Q: Why not use classification?
+A: Often anomalies are rare or unknown — no labeled anomaly data to train a supervised classifier. Autoencoder is unsupervised/one-class.
+
+Q: How to choose latent dimension?
+A: Start small (e.g., 8–32); increase if reconstruction too poor. Cross-validate by balancing reconstruction quality and detection ability.
+
+Q: Why MSE for scoring but MSLE for loss?
+A: MSLE can be numerically stable for small positive data; but MSE is intuitive for per-sample reconstruction error and commonly used for thresholding.
+
+Q: How to avoid model learning identity mapping?
+A: Use bottleneck (smaller latent dim), regularization (dropout, weight decay), or limit network capacity.
+
+If you want, I can now:
+
+Produce a short 1-page printable summary you can memorize, or
+
+Give a line-by-line viva script to say for the encoder code block specifically (exact sentences), or
+
+Add comments in your code near the encoder block describing each layer in 1–2 lines.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SEED = 42
+np.random.seed(SEED)
+tf.random.set_seed(SEED)
+print("TensorFlow:", tf.__version__)
+SEED = 42
+
+Choose a fixed seed for reproducibility (makes random operations deterministic-ish).
+
+Exam: “Seed ensures experiments are repeatable.”
+
+np.random.seed(SEED) and tf.random.set_seed(SEED)
+
+Set seeds for NumPy/TensorFlow randomness (initial weights, shuffling).
+
+Exam: “Fixing random seeds reduces run-to-run variance.”
+
+print("TensorFlow:", tf.__version__)
+
+Shows TF version for debugging / reproducibility.
+
+Cell 2 — Load / access dataset
+python
+Copy code
+path = "http://storage.googleapis.com/download.tensorflow.org/data/ecg.csv"
+data = pd.read_csv(path, header=None)
+print("Raw data shape:", data.shape)
+data.head(3)
+path = "..."
+
+URL where ECG CSV is stored.
+
+data = pd.read_csv(path, header=None)
+
+Reads CSV into a DataFrame. header=None means file has no header row; columns will be numeric indexes.
+
+Exam: “pandas read_csv loads the ECG time-series; each row is one sample and last column is label.”
+
+print("Raw data shape:", data.shape)
+
+Prints rows × columns so you know dataset dimensions.
+
+data.head(3)
+
+Shows first 3 rows to inspect raw values.
+
+Cell 3 — Inspect & split features / labels
+python
+Copy code
+n_cols = data.shape[1]
+label_col = n_cols - 1
+features = data.drop(label_col, axis=1)
+labels = data[label_col].astype(int)
+print("Features shape:", features.shape)
+print("Labels distribution:")
+print(labels.value_counts(normalize=False))
+plt.figure(figsize=(6,2))
+plt.plot(features.iloc[0].values)
+plt.title(f"Sample 0 (label={labels.iloc[0]})")
+plt.show()
+n_cols = data.shape[1] and label_col = n_cols - 1
+
+Find index of last column which contains labels.
+
+features = data.drop(label_col, axis=1)
+
+Drop the label column; features now contains only signal columns.
+
+labels = data[label_col].astype(int)
+
+Extract label column and ensure integer type.
+
+print("Features shape:", features.shape) and labels.value_counts()
+
+Check how many features (time steps) and class distribution.
+
+Plot sample:
+
+plt.plot(features.iloc[0].values) draws the first ECG waveform.
+
+Exam: “Visualizing a sample helps confirm the data is a time-series and labels make sense.”
+
+Cell 4 — Train/test split & scaler
+python
+Copy code
+x_train_raw, x_test_raw, y_train, y_test = train_test_split(
+    features, labels, test_size=0.2, random_state=SEED, stratify=labels
+)
+print("Train shape:", x_train_raw.shape, "Test shape:", x_test_raw.shape)
+scaler = MinMaxScaler(feature_range=(0, 1))
+train_test_split(...)
+
+Splits dataset into training and testing subsets. stratify=labels keeps class proportions in both sets.
+
+Exam: “Stratified split keeps label distribution same in train and test.”
+
+scaler = MinMaxScaler(feature_range=(0, 1))
+
+Prepare a scaler to transform features into [0,1]; not yet fit — will fit on normal training subset.
+
+Cell 5 — Choose normal class and prepare training data
+python
+Copy code
+NORMAL_LABEL = 1
+train_normal_idx = y_train[y_train == NORMAL_LABEL].index
+x_train_normal = x_train_raw.loc[train_normal_idx].copy()
+print("Normal examples in training set:", x_train_normal.shape[0])
+scaler.fit(x_train_normal)
+x_train_scaled = scaler.transform(x_train_normal)
+x_test_scaled  = scaler.transform(x_test_raw)
+x_train_all_scaled = scaler.transform(x_train_raw)
+NORMAL_LABEL = 1
+
+Picks which label value corresponds to "normal" class. If dataset uses 0 as normal, change accordingly.
+
+Exam: “We must know which label means normal to train autoencoder on normal data only.”
+
+train_normal_idx = y_train[y_train == NORMAL_LABEL].index
+
+Get indices for normal rows in training set.
+
+x_train_normal = x_train_raw.loc[train_normal_idx].copy()
+
+Extract only normal samples for training the autoencoder. .copy() prevents chained assignment warnings.
+
+scaler.fit(x_train_normal)
+
+Fit MinMax scaler on normal subset only. This avoids leaking anomalous statistics into scaling.
+
+x_train_scaled = scaler.transform(x_train_normal)
+
+Scaled training input that will be used to train autoencoder.
+
+x_test_scaled = scaler.transform(x_test_raw)
+
+Apply same scaling to test set (must use same scaler to be consistent).
+
+x_train_all_scaled = scaler.transform(x_train_raw)
+
+Optional: scaled version of whole training set, useful when computing thresholds across all training examples.
+
+Why train on normal only?
+
+Autoencoder should learn the normal manifold; including anomalies will cause it to learn to reconstruct anomalies too, reducing detection capability.
+
+Cell 6 — Build autoencoder: encoder + decoder
+python
+Copy code
+from tensorflow.keras import layers, Sequential, Model
+input_dim = x_train_scaled.shape[1]
+latent_dim = 8
+input_dim = x_train_scaled.shape[1]
+
+Number of features/time-steps per sample (dimensionality of input).
+
+latent_dim = 8
+
+Size of the bottleneck vector (tunable). Smaller = more compression.
+
+Encoder
+python
+Copy code
+encoder = Sequential([
+    layers.InputLayer(input_shape=(input_dim,)),
+    layers.Dense(64, activation='relu'),
+    layers.Dropout(0.1),
+    layers.Dense(32, activation='relu'),
+    layers.Dropout(0.1),
+    layers.Dense(16, activation='relu'),
+    layers.Dropout(0.1),
+    layers.Dense(latent_dim, activation='relu', name='latent')
+], name="encoder")
+Explain each line/group:
+
+Sequential([...], name="encoder")
+
+Sequential builds a model by stacking layers in order. Good for simple encoder stacks.
+
+What is Sequential? A container that feeds the output of each layer to the next.
+
+layers.InputLayer(input_shape=(input_dim,))
+
+Declares the expected input shape (1D vector with input_dim features).
+
+Exam: “Input layer defines shape but has no parameters.”
+
+layers.Dense(64, activation='relu')
+
+What is Dense? A fully-connected (a.k.a. linear) layer where each output unit computes a weighted sum of all inputs plus bias:
+
+𝑦
+=
+𝜙
+(
+𝑊
+𝑥
++
+𝑏
+)
+y=ϕ(Wx+b)
+where 
+𝑊
+W is weights matrix, 
+𝑏
+b is bias vector, and 
+𝜙
+ϕ is activation.
+
+Why 64 units? Allows learning 64 features from input.
+
+Activation relu: non-linear function max(0,x) that lets network model non-linear relationships.
+
+Exam: “Dense layers learn weighted combinations of inputs — Dense(64) means 64 neurons.”
+
+layers.Dropout(0.1)
+
+Randomly sets 10% of inputs to zero during training to regularize and avoid overfitting.
+
+Exam: “Dropout forces network to not rely on any single neuron.”
+
+Next Dense(32), Dropout(0.1), Dense(16), Dropout(0.1)
+
+Gradually reduce dimensionality to encourage compression.
+
+layers.Dense(latent_dim, activation='relu', name='latent')
+
+Final bottleneck layer producing latent_dim-dimensional vector 
+𝑧
+z.
+
+Why name the layer? Useful to reference latent outputs if you want separate encoder model.
+
+Short examiner line: “Encoder compresses input into an 8-dim latent vector via Dense layers with ReLU and dropout to avoid overfitting.”
+
+Decoder
+python
+Copy code
+decoder = Sequential([
+    layers.InputLayer(input_shape=(latent_dim,)),
+    layers.Dense(16, activation='relu'),
+    layers.Dropout(0.1),
+    layers.Dense(32, activation='relu'),
+    layers.Dropout(0.1),
+    layers.Dense(64, activation='relu'),
+    layers.Dropout(0.1),
+    layers.Dense(input_dim, activation='sigmoid')
+], name="decoder")
+InputLayer(input_shape=(latent_dim,))
+
+Decoder expects latent vector of size latent_dim.
+
+Dense(16), Dense(32), Dense(64) with Dropout
+
+Mirror encoder but in reverse to expand latent vector back toward original input dimension.
+
+Dense(input_dim, activation='sigmoid')
+
+Output layer restores the original number of features and uses sigmoid activation because inputs were scaled to [0,1]. Sigmoid outputs values in (0,1).
+
+Exam: “Use sigmoid if data is normalized to [0,1]; otherwise use linear.”
+
+What is sigmoid?
+
+Activation function 
+𝜎
+(
+𝑥
+)
+=
+1
+1
++
+𝑒
+−
+𝑥
+σ(x)= 
+1+e 
+−x
+ 
+1
+​
+  that maps values to (0,1). Good for probabilistic outputs or normalized ranges.
+
+Full autoencoder model
+python
+Copy code
+inputs = keras.Input(shape=(input_dim,))
+z = encoder(inputs)
+reconstruction = decoder(z)
+autoencoder = Model(inputs, reconstruction, name="autoencoder")
+encoder.summary()
+decoder.summary()
+autoencoder.summary()
+inputs = keras.Input(shape=(input_dim,))
+
+Define model input tensor.
+
+z = encoder(inputs) and reconstruction = decoder(z)
+
+Pass input through encoder to get latent z, then through decoder to get reconstruction 
+𝑥
+^
+x
+^
+ .
+
+Model(inputs, reconstruction, name="autoencoder")
+
+Create a Keras Model mapping input → reconstruction. This is the trainable autoencoder.
+
+encoder.summary(), decoder.summary(), autoencoder.summary()
+
+Print model layer info and parameter counts for debugging/inspection.
+
+Exam: “We build encoder and decoder as separate Sequential modules and then link them to form the full Model for training.”
+
+Cell 7 — Compile the model
+python
+Copy code
+autoencoder.compile(
+    optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+    loss='msle',
+    metrics=['mse']
+)
+optimizer=keras.optimizers.Adam(learning_rate=1e-3)
+
+What is Adam? Adaptive Moment Estimation — optimizer that adapts per-parameter learning rates using moving averages of gradients and squared gradients. Good default for many tasks.
+
+Exam: “Adam adapts learning rate per parameter and often converges faster than vanilla SGD.”
+
+loss='msle' (Mean Squared Logarithmic Error)
+
+Loss function computed between original input 
+𝑥
+x and reconstructed 
+𝑥
+^
+x
+^
+ :
+
+𝑀
+𝑆
+𝐿
+𝐸
+=
+1
+𝑁
+∑
+𝑖
+=
+1
+𝑁
+(
+log
+⁡
+(
+1
++
+𝑥
+^
+𝑖
+)
+−
+log
+⁡
+(
+1
++
+𝑥
+𝑖
+)
+)
+2
+MSLE= 
+N
+1
+​
+  
+i=1
+∑
+N
+​
+ (log(1+ 
+x
+^
+  
+i
+​
+ )−log(1+x 
+i
+​
+ )) 
+2
+ 
+Why MSLE? Reduces emphasis on large absolute differences — useful if relative differences matter and values ≥ 0.
+
+Exam: “MSLE penalizes relative differences, MSE penalizes absolute squared differences. We still compute per-sample MSE for thresholding since it’s intuitive.”
+
+metrics=['mse']
+
+Track mean-squared-error during training for monitoring.
+
+Exam one-liner: “We compile with Adam and MSLE to train the network to minimize reconstruction error, and monitor MSE to observe raw squared error.”
+
+Cell 8 — Train the autoencoder
+python
+Copy code
+history = autoencoder.fit(
+    x_train_scaled,
+    x_train_scaled,
+    epochs=30,
+    batch_size=128,
+    validation_data=(x_test_scaled, x_test_scaled),
+    shuffle=True,
+    verbose=2
+)
+autoencoder.fit(x_train_scaled, x_train_scaled, ...)
+
+Train input = target because autoencoder reconstructs its input.
+
+epochs=30
+
+Number of full passes on training data. Tune as needed.
+
+batch_size=128
+
+Samples per gradient update. Controls trade-off noise vs speed.
+
+validation_data=(x_test_scaled, x_test_scaled)
+
+Evaluate model on test set reconstruction each epoch (not used for training). Here used as a validation set; typically you'd use a held-out normal validation set for threshold selection.
+
+shuffle=True
+
+Shuffle training data every epoch to improve SGD mixing.
+
+history
+
+Keras returns training history containing lists for loss and val_loss, etc.
+
+Exam: “We train the autoencoder on normal data only to learn the normal reconstruction mapping.”
+
+Cell 8 plot — training curves
+python
+Copy code
+plt.plot(history.history['loss'], label='train_loss')
+plt.plot(history.history['val_loss'], label='val_loss')
+Visualize training vs validation loss to check convergence and overfitting.
+
+Cell 9 — Compute reconstruction errors & set threshold
+python
+Copy code
+recons_train = autoencoder.predict(x_train_scaled)
+mse_train = np.mean(np.square(recons_train - x_train_scaled), axis=1)
+
+k = 1.0
+threshold = mse_train.mean() + k * mse_train.std()
+autoencoder.predict(x_train_scaled)
+
+Reconstruct all normal training samples (fast inference).
+
+mse_train = np.mean(np.square(recons_train - x_train_scaled), axis=1)
+
+What is this? Per-sample Mean Squared Error. Compute element-wise squared difference, average across features for each sample → 1 MSE value per sample.
+
+Exam: “Per-sample MSE quantifies how well a particular sample was reconstructed.”
+
+threshold = mse_train.mean() + k * mse_train.std()
+
+Simple statistical threshold: mean + k * std. If sample's MSE above threshold → consider anomaly.
+
+Why k? Tuneable parameter controlling sensitivity. Larger k → fewer positives (more conservative).
+
+Plot histogram of mse_train to visualize distribution and location of threshold.
+
+Alternative thresholds: percentile (95th), ROC-based, validation-set based.
+
+Cell 10 — Make predictions on test set
+python
+Copy code
+recons_test = autoencoder.predict(x_test_scaled)
+mse_test = np.mean(np.square(recons_test - x_test_scaled), axis=1)
+pred_is_normal = mse_test <= threshold
+pred_labels = pred_is_normal.astype(float)
+y_test_mapped = (y_test == NORMAL_LABEL).astype(float)
+recons_test and mse_test
+
+Reconstruct test data and compute per-sample MSEs.
+
+pred_is_normal = mse_test <= threshold
+
+Boolean array: True if sample MSE is within threshold (normal), False otherwise (anomaly).
+
+pred_labels = pred_is_normal.astype(float)
+
+Convert boolean to numeric labels (1.0 normal, 0.0 anomaly) to match y_test_mapped.
+
+y_test_mapped = (y_test == NORMAL_LABEL).astype(float)
+
+Map original labels to same convention: 1 if normal, 0 if anomaly.
+
+Exam: “We flag samples whose reconstruction MSE exceeds threshold as anomalous.”
+
+Cell 11 — Evaluate predictions
+python
+Copy code
+acc = accuracy_score(y_test_mapped, pred_labels)
+prec, rec, f1, _ = precision_recall_fscore_support(y_test_mapped, pred_labels, average='binary', zero_division=0)
+cm = confusion_matrix(y_test_mapped, pred_labels)
+accuracy_score
+
+Fraction of correct labels. Not ideal for imbalanced anomaly detection, but informative.
+
+precision_recall_fscore_support(..., average='binary')
+
+Compute precision, recall, F1 for the positive class (here normal=1 as coded). precision = TP/(TP+FP), recall = TP/(TP+FN).
+
+confusion_matrix(y_true, y_pred)
+
+2×2 matrix showing counts of TP, FP, FN, TN. Useful to inspect types of errors.
+
+Exam: “Precision and recall are more informative than accuracy when anomalies are rare; recall shows how many real normals we correctly label.”
+
+Cell 12 — Show some reconstructed examples
+python
+Copy code
+def show_reconstruction(idx, scaled=True):
+    orig = x_test_scaled[idx]
+    recon = recons_test[idx]
+    sample_index = x_test_raw.index[idx]
+    true_label = y_test.iloc[idx]
+    mse_val = mse_test[idx]
+    plt.subplot(1,3,1); plt.plot(orig); plt.title("Original (scaled)")
+    plt.subplot(1,3,2); plt.plot(recon); plt.title("Reconstruction")
+    plt.subplot(1,3,3); plt.plot(orig - recon); plt.title(f"Residual (MSE={mse_val:.6f})\nTrue label={true_label}")
+orig, recon, orig - recon
+
+Visualize original signal, reconstructed signal, and residual (difference). High residuals point to anomalies.
+
+show_reconstruction(0) etc.
+
+Manually inspect examples to justify decisions qualitatively.
+
+Exam: “Plotting original vs reconstructed shows visually where autoencoder fails — large residuals correspond to anomalies.”
+
+Cell 13 — Save model & scaler
+python
+Copy code
+autoencoder.save("ecg_autoencoder.keras")
+import joblib
+joblib.dump(scaler, "ecg_scaler.save")
+autoencoder.save(...)
+
+Save trained Keras model for later use (weights + architecture).
+
+joblib.dump(scaler, "ecg_scaler.save")
+
+Save scaler so you can apply the exact same scaling at inference time.
+
+Exam: “Saving model and scaler preserves training artifacts for deployment or future predictions.”
+
+Definitions / Short concept cards (memorize these)
+Dense layer
+
+Fully-connected layer computing y = activation(Wx + b). Each neuron connects to all inputs.
+
+Say: “Dense learns linear combinations of inputs followed by nonlinearity.”
+
+Dropout(layer)
+
+Randomly disables a fraction of neurons during training.
+
+Say: “Dropout reduces overfitting by preventing co-adaptation of neurons.”
+
+ReLU activation
+
+max(0, x). Fast and reduces vanishing gradient for positive activations.
+
+Say: “ReLU is simple and effective for hidden layers.”
+
+Sigmoid activation
+
+Maps to (0,1). Good for outputs that represent probabilities or normalized values.
+
+MinMaxScaler
+
+Scales features into [0,1] range.
+
+Say: “We scale inputs to match sigmoid outputs and improve numerical stability.”
+
+Latent vector (bottleneck)
+
+Compact representation learned by encoder.
+
+Say: “Latent vector compresses essential information—if anomaly differs from normal manifold, it will reconstruct poorly.”
+
+MSLE vs MSE
+
+MSLE uses log of predictions: favors relative differences; MSE is squared absolute difference.
+
+Say: “MSLE reduces effect of large absolute differences; MSE is intuitive for per-sample reconstruction scoring.”
+
+Thresholding strategies
+
+Mean+std, percentile, ROC-based.
+
+Say: “Percentile threshold (e.g., 95th) is robust and easy to interpret.”
+
